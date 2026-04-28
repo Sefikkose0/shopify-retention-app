@@ -1,0 +1,18 @@
+name = "Retention Engine"
+client_id = "394f71297286a115d71051f424664ff8"
+application_url = "https://retention-engine-sefik.loca.lt"
+embedded = true
+
+[access_scopes]
+scopes = "read_customers,read_orders"
+
+[auth]
+redirect_urls = [
+  "https://retention-engine-sefik.loca.lt/auth/callback"
+]
+
+[webhooks]
+api_version = "2024-01"
+
+[pos]
+embedded = false

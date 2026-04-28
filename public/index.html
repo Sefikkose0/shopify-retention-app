@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retention Engine - AI Müşteri Geri Kazanma</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f6f6f7; color: #202223; }
+    .app { display: flex; min-height: 100vh; }
+    .sidebar { width: 240px; background: #1a1a2e; color: #fff; padding: 24px 0; flex-shrink: 0; }
+    .sidebar-brand { padding: 0 24px 24px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    .sidebar-brand h1 { font-size: 18px; font-weight: 700; color: #e94560; }
+    .sidebar-brand p { font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 4px; }
+    .nav { padding: 16px 0; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 24px; cursor: pointer; color: rgba(255,255,255,0.7); transition: all 0.2s; font-size: 14px; }
+    .nav-item:hover, .nav-item.active { background: rgba(233,69,96,0.15); color: #e94560; }
+    .nav-item .icon { font-size: 18px; }
+    .main { flex: 1; overflow: auto; }
+    .topbar { background: #fff; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e3e3e3; }
+    .topbar h2 { font-size: 20px; font-weight: 600; }
+    .topbar-actions { display: flex; gap: 12px; }
+    .content { padding: 32px; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
+    .stat-card { background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .stat-card .label { font-size: 13px; color: #6d7175; margin-bottom: 8px; }
+    .stat-card .value { font-size: 32px; font-weight: 700; }
+    .stat-card .value.danger { color: #e94560; }
+    .stat-card .value.warning { color: #f59e0b; }
+    .stat-card .value.success { color: #10b981; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 24px; }
+    .card-header { padding: 20px 24px; border-bottom: 1px solid #f0f0f0; display: flex; align-items: center; justify-content: space-between; }
+    .card-header h3 { font-size: 16px; font-weight: 600; }
+    .card-body { padding: 24px; }
+    .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+    .btn-primary { background: #e94560; color: #fff; }
+    .btn-primary:hover { background: #c73652; }
+    .btn-secondary { background: #f6f6f7; color: #202223; border: 1px solid #e3e3e3; }
+    .btn-secondary:hover { background: #e9e9ea; }
+    .btn-success { background: #10b981; color: #fff; }
+    .btn-sm { padding: 6px 14px; font-size: 13px; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px 16px; font-size: 12px; color: #6d7175; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 2px solid #f0f0f0; }
+    td { padding: 14px 16px; border-bottom: 1px solid #f6f6f7; font-size: 14px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+    .badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .badge-critical { background: #fee2e2; color: #991b1b; }
+    .badge-high { background: #ffedd5; color: #92400e; }
+    .badge-medium { background: #fef3c7; color: #78350f; }
+    .badge-low { background: #d1fae5; color: #065f46; }
+    .badge-active { background: #d1fae5; color: #065f46; }
+    .badge-draft { background: #f3f4f6; color: #374151; }
+    .badge-completed { background: #dbeafe; color: #1e40af; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 14px; border: 1px solid #e3e3e3; border-radius: 8px; font-size: 14px; outline: none; }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #e94560; box-shadow: 0 0 0 3px rgba(233,69,96,0.1); }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 100; align-items: center; justify-content: center; }
+    .modal.open { display: flex; }
+    .modal-box { background: #fff; border-radius: 16px; padding: 32px; width: 600px; max-height: 90vh; overflow-y: auto; }
+    .modal-box h3 { font-size: 20px; font-weight: 700; margin-bottom: 24px; }
+    .ai-badge { display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; padding: 4px 12px; border-radius: 20px; font-size: 12px; }
+    .progress-bar { height: 6px; background: #f0f0f0; border-radius: 3px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    .toast { position: fixed; bottom: 32px; right: 32px; background: #202223; color: #fff; padding: 14px 24px; border-radius: 10px; font-size: 14px; z-index: 200; display: none; }
+    .toast.show { display: block; }
+    .empty-state { text-align: center; padding: 60px 20px; color: #6d7175; }
+    .empty-state .icon { font-size: 48px; margin-bottom: 16px; }
+    .sync-info { font-size: 13px; color: #6d7175; }
+    .loading { opacity: 0.5; pointer-events: none; }
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="sidebar-brand">
+      <h1>Retention Engine</h1>
+      <p>AI Müşteri Geri Kazanma</p>
+    </div>
+    <nav class="nav">
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <span class="icon">📊</span> Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('customers')">
+        <span class="icon">👥</span> Müşteriler
+      </div>
+      <div class="nav-item" onclick="showPage('campaigns')">
+        <span class="icon">📧</span> Kampanyalar
+      </div>
+      <div class="nav-item" onclick="showPage('analytics')">
+        <span class="icon">📈</span> Analitik
+      </div>
+      <div class="nav-item" onclick="showPage('settings')">
+        <span class="icon">⚙️</span> Ayarlar
+      </div>
+      <div class="nav-item" onclick="showPage('billing')">
+        <span class="icon">💳</span> Abonelik
+      </div>
+    </nav>
+  </div>
+
+  <div class="main">
+    <!-- Dashboard -->
+    <div id="page-dashboard">
+      <div class="topbar">
+        <h2>Dashboard</h2>
+        <div class="topbar-actions">
+          <button class="btn btn-secondary btn-sm" onclick="syncCustomers()">🔄 Müşteri Senkronizasyonu</button>
+        </div>
+      </div>
+      <div class="content">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="label">Toplam Müşteri</div>
+            <div class="value" id="stat-total">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Risk Altında</div>
+            <div class="value warning" id="stat-atrisk">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Kritik Müşteri</div>
+            <div class="value danger" id="stat-critical">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Kazanılan Gelir</div>
+            <div class="value success" id="stat-revenue">$0</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Son Kampanyalar</h3>
+            <button class="btn btn-primary btn-sm" onclick="showPage('campaigns')">Tüm Kampanyalar</button>
+          </div>
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead><tr><th>Kampanya</th><th>Tür</th><th>Gönderilen</th><th>Açılma</th><th>Durum</th></tr></thead>
+              <tbody id="recent-campaigns"><tr><td colspan="5" class="empty-state">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Customers -->
+    <div id="page-customers" style="display:none">
+      <div class="topbar">
+        <h2>Müşteriler <span class="ai-badge">🤖 AI Risk Skoru</span></h2>
+        <div class="topbar-actions">
+          <select id="filter-risk" onchange="loadCustomers()" class="btn btn-secondary btn-sm" style="padding:6px 12px">
+            <option value="">Tüm Risk Seviyeleri</option>
+            <option value="critical">Kritik</option>
+            <option value="high">Yüksek</option>
+            <option value="medium">Orta</option>
+            <option value="low">Düşük</option>
+          </select>
+          <select id="filter-segment" onchange="loadCustomers()" class="btn btn-secondary btn-sm" style="padding:6px 12px">
+            <option value="">Tüm Segmentler</option>
+            <option value="30">30 Gün Pasif</option>
+            <option value="60">60 Gün Pasif</option>
+            <option value="90">90+ Gün Pasif</option>
+          </select>
+        </div>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead><tr><th>Müşteri</th><th>Son Sipariş</th><th>Toplam Harcama</th><th>Sipariş Sayısı</th><th>Risk Skoru</th><th>Seviye</th></tr></thead>
+              <tbody id="customers-table"><tr><td colspan="6" style="text-align:center;padding:40px;color:#6d7175">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Campaigns -->
+    <div id="page-campaigns" style="display:none">
+      <div class="topbar">
+        <h2>Kampanyalar</h2>
+        <button class="btn btn-primary" onclick="openCreateCampaign()">+ Yeni Kampanya</button>
+      </div>
+      <div class="content">
+        <div class="card">
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead><tr><th>Kampanya Adı</th><th>Tür</th><th>Hedef</th><th>Gönderilen</th><th>Açılma %</th><th>Durum</th><th>İşlem</th></tr></thead>
+              <tbody id="campaigns-table"><tr><td colspan="7" style="text-align:center;padding:40px;color:#6d7175">Yükleniyor...</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Analytics -->
+    <div id="page-analytics" style="display:none">
+      <div class="topbar"><h2>Analitik</h2></div>
+      <div class="content">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="label">Toplam Gönderilen Email</div>
+            <div class="value" id="ana-sent">-</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Ortalama Açılma Oranı</div>
+            <div class="value" id="ana-open">-%</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Tıklama Oranı</div>
+            <div class="value" id="ana-click">-%</div>
+          </div>
+          <div class="stat-card">
+            <div class="label">Toplam Kazanılan Gelir</div>
+            <div class="value success" id="ana-revenue">$0</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Kampanya Detayları</h3></div>
+          <div class="card-body" style="padding:0">
+            <table>
+              <thead><tr><th>Kampanya</th><th>Gönderilen</th><th>Açılan</th><th>Tıklayan</th><th>Açılma %</th><th>Tıklama %</th></tr></thead>
+              <tbody id="analytics-table"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="page-settings" style="display:none">
+      <div class="topbar"><h2>Ayarlar</h2></div>
+      <div class="content">
+        <div class="card">
+          <div class="card-header"><h3>Email Ayarları</h3></div>
+          <div class="card-body">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Gönderici Adı</label>
+                <input type="text" id="s-fromName" placeholder="Mağazanız" />
+              </div>
+              <div class="form-group">
+                <label>Gönderici Email</label>
+                <input type="email" id="s-fromEmail" placeholder="noreply@magazaniz.com" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Resend API Key <a href="https://resend.com" target="_blank" style="font-size:12px;color:#e94560">(Resend.com'dan ücretsiz alın)</a></label>
+              <input type="password" id="s-resendKey" placeholder="re_xxxxxxxxxxxx" />
+            </div>
+            <button class="btn btn-primary" onclick="saveSettings()">Kaydet</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h3>Yapay Zeka (Claude API)</h3></div>
+          <div class="card-body">
+            <p style="font-size:14px;color:#6d7175;margin-bottom:16px">AI ile kişiselleştirilmiş email içerikleri otomatik oluşturulur. <a href="https://console.anthropic.com" target="_blank" style="color:#e94560">Anthropic Console</a>'dan API key alın.</p>
+            <div class="form-group">
+              <label>Anthropic API Key (sunucu .env dosyasında saklanır)</label>
+              <input type="text" value="••••••••••••••••" disabled style="background:#f6f6f7" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Billing -->
+    <div id="page-billing" style="display:none">
+      <div class="topbar"><h2>Abonelik Planları</h2></div>
+      <div class="content">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:900px">
+          <div class="card" style="text-align:center;border: 2px solid transparent">
+            <div class="card-body">
+              <h3 style="font-size:18px;margin-bottom:8px">Starter</h3>
+              <div style="font-size:36px;font-weight:700;margin:16px 0">$29<span style="font-size:16px;color:#6d7175">/ay</span></div>
+              <ul style="text-align:left;font-size:14px;color:#6d7175;list-style:none;margin-bottom:24px;line-height:2">
+                <li>✅ 500 müşteriye kadar</li>
+                <li>✅ 3 aktif kampanya</li>
+                <li>✅ AI email oluşturma</li>
+                <li>✅ Temel analitik</li>
+              </ul>
+              <button class="btn btn-secondary" onclick="subscribe('starter')">Plan Seç</button>
+            </div>
+          </div>
+          <div class="card" style="text-align:center;border: 2px solid #e94560">
+            <div class="card-body">
+              <div style="background:#e94560;color:#fff;font-size:12px;padding:4px;border-radius:4px;margin-bottom:12px">EN POPÜLER</div>
+              <h3 style="font-size:18px;margin-bottom:8px">Growth</h3>
+              <div style="font-size:36px;font-weight:700;margin:16px 0">$59<span style="font-size:16px;color:#6d7175">/ay</span></div>
+              <ul style="text-align:left;font-size:14px;color:#6d7175;list-style:none;margin-bottom:24px;line-height:2">
+                <li>✅ 2.000 müşteriye kadar</li>
+                <li>✅ Sınırsız kampanya</li>
+                <li>✅ AI email + SMS</li>
+                <li>✅ Gelişmiş analitik</li>
+                <li>✅ Öncelikli destek</li>
+              </ul>
+              <button class="btn btn-primary" onclick="subscribe('growth')">Plan Seç</button>
+            </div>
+          </div>
+          <div class="card" style="text-align:center;border: 2px solid transparent">
+            <div class="card-body">
+              <h3 style="font-size:18px;margin-bottom:8px">Pro</h3>
+              <div style="font-size:36px;font-weight:700;margin:16px 0">$99<span style="font-size:16px;color:#6d7175">/ay</span></div>
+              <ul style="text-align:left;font-size:14px;color:#6d7175;list-style:none;margin-bottom:24px;line-height:2">
+                <li>✅ Sınırsız müşteri</li>
+                <li>✅ Sınırsız kampanya</li>
+                <li>✅ AI tam otomasyon</li>
+                <li>✅ Özel entegrasyon</li>
+                <li>✅ Dedicated destek</li>
+              </ul>
+              <button class="btn btn-secondary" onclick="subscribe('pro')">Plan Seç</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Create Campaign Modal -->
+<div class="modal" id="modal-campaign">
+  <div class="modal-box">
+    <h3>Yeni Kampanya Oluştur <span class="ai-badge">🤖 AI Destekli</span></h3>
+    <div class="form-group">
+      <label>Kampanya Adı</label>
+      <input type="text" id="c-name" placeholder="Örn: 60 Gün Geri Kazanma" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Kampanya Türü</label>
+        <select id="c-type">
+          <option value="winback_30">30 Gün Pasif Müşteriler</option>
+          <option value="winback_60">60 Gün Pasif Müşteriler</option>
+          <option value="winback_90">90+ Gün Pasif Müşteriler</option>
+          <option value="atrisk">Risk Altındaki Müşteriler</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>İndirim Oranı (%)</label>
+        <input type="number" id="c-discount" placeholder="Örn: 15" min="0" max="100" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>
+        <input type="checkbox" id="c-useai" checked />
+        AI ile otomatik email içeriği oluştur
+      </label>
+      <p style="font-size:12px;color:#6d7175;margin-top:4px">Claude AI, müşteri segmentine özel kişiselleştirilmiş email yazacak</p>
+    </div>
+    <div id="manual-content" style="display:none">
+      <div class="form-group">
+        <label>Email Konusu</label>
+        <input type="text" id="c-subject" placeholder="Email konusu" />
+      </div>
+      <div class="form-group">
+        <label>Email İçeriği (HTML)</label>
+        <textarea id="c-body" rows="6" placeholder="<p>Email içeriği...</p>"></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeModal()">İptal</button>
+      <button class="btn btn-primary" id="btn-create" onclick="createCampaign()">Kampanya Oluştur</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const shop = new URLSearchParams(window.location.search).get('shop') || '';
+
+  function showPage(name) {
+    document.querySelectorAll('[id^="page-"]').forEach(p => p.style.display = 'none');
+    document.getElementById('page-' + name).style.display = 'block';
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    if (name === 'dashboard') loadDashboard();
+    if (name === 'customers') loadCustomers();
+    if (name === 'campaigns') loadCampaigns();
+    if (name === 'analytics') loadAnalytics();
+    if (name === 'settings') loadSettings();
+  }
+
+  function toast(msg, color = '#202223') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.background = color;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  async function api(path, opts = {}) {
+    const sep = path.includes('?') ? '&' : '?';
+    const res = await fetch(path + sep + 'shop=' + shop, opts);
+    return res.json();
+  }
+
+  async function loadDashboard() {
+    const data = await api('/api/dashboard');
+    document.getElementById('stat-total').textContent = data.totalCustomers || 0;
+    document.getElementById('stat-atrisk').textContent = data.atRisk || 0;
+    document.getElementById('stat-critical').textContent = data.critical || 0;
+    document.getElementById('stat-revenue').textContent = '$' + (data.revenueRecovered || 0).toFixed(0);
+
+    const tbody = document.getElementById('recent-campaigns');
+    if (!data.recentCampaigns?.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><div class="icon">📧</div><p>Henüz kampanya yok. Müşterileri senkronize edip ilk kampanyanızı oluşturun!</p></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.recentCampaigns.map(c => `
+      <tr>
+        <td><strong>${c.name}</strong></td>
+        <td>${typeLabel(c.type)}</td>
+        <td>${c.sentCount}</td>
+        <td>${c.sentCount > 0 ? Math.round(c.openCount / c.sentCount * 100) + '%' : '-'}</td>
+        <td><span class="badge badge-${c.status}">${c.status}</span></td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadCustomers() {
+    const risk = document.getElementById('filter-risk')?.value || '';
+    const segment = document.getElementById('filter-segment')?.value || '';
+    const params = new URLSearchParams({ shop, limit: '100' });
+    if (risk) params.set('riskLevel', risk);
+    if (segment) params.set('segment', segment);
+
+    const data = await fetch('/api/customers?' + params).then(r => r.json());
+    const tbody = document.getElementById('customers-table');
+
+    if (!data.customers?.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:#6d7175">Müşteri bulunamadı. Dashboard\'dan senkronizasyon başlatın.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.customers.map(c => {
+      const days = c.lastOrderDate ? Math.floor((Date.now() - new Date(c.lastOrderDate)) / 86400000) : null;
+      return `
+        <tr>
+          <td><strong>${c.firstName} ${c.lastName}</strong><br><span style="color:#6d7175;font-size:12px">${c.email}</span></td>
+          <td>${days !== null ? days + ' gün önce' : 'Sipariş yok'}</td>
+          <td>$${c.totalSpent.toFixed(2)}</td>
+          <td>${c.totalOrders}</td>
+          <td>
+            <div class="progress-bar" style="width:80px">
+              <div class="progress-fill" style="width:${c.riskScore}%;background:${riskColor(c.riskLevel)}"></div>
+            </div>
+            <span style="font-size:12px">${c.riskScore}/100</span>
+          </td>
+          <td><span class="badge badge-${c.riskLevel}">${riskLabel(c.riskLevel)}</span></td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  async function loadCampaigns() {
+    const data = await api('/api/campaigns');
+    const tbody = document.getElementById('campaigns-table');
+    if (!data.campaigns?.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:#6d7175">Henüz kampanya yok.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.campaigns.map(c => `
+      <tr>
+        <td><strong>${c.name}</strong></td>
+        <td>${typeLabel(c.type)}</td>
+        <td>${c._count?.targets || 0}</td>
+        <td>${c.sentCount}</td>
+        <td>${c.sentCount > 0 ? Math.round(c.openCount / c.sentCount * 100) + '%' : '-'}</td>
+        <td><span class="badge badge-${c.status}">${c.status}</span></td>
+        <td>
+          ${c.status === 'draft' ? `<button class="btn btn-success btn-sm" onclick="sendCampaign('${c.id}')">Gönder</button>` : ''}
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadAnalytics() {
+    const data = await api('/api/campaigns');
+    const campaigns = data.campaigns || [];
+    const totalSent = campaigns.reduce((s, c) => s + c.sentCount, 0);
+    const totalOpen = campaigns.reduce((s, c) => s + c.openCount, 0);
+    const totalClick = campaigns.reduce((s, c) => s + c.clickCount, 0);
+    const totalRevenue = campaigns.reduce((s, c) => s + c.revenueRecovered, 0);
+    document.getElementById('ana-sent').textContent = totalSent;
+    document.getElementById('ana-open').textContent = totalSent > 0 ? Math.round(totalOpen / totalSent * 100) + '%' : '-';
+    document.getElementById('ana-click').textContent = totalSent > 0 ? Math.round(totalClick / totalSent * 100) + '%' : '-';
+    document.getElementById('ana-revenue').textContent = '$' + totalRevenue.toFixed(0);
+    document.getElementById('analytics-table').innerHTML = campaigns.map(c => `
+      <tr>
+        <td>${c.name}</td>
+        <td>${c.sentCount}</td>
+        <td>${c.openCount}</td>
+        <td>${c.clickCount}</td>
+        <td>${c.sentCount > 0 ? Math.round(c.openCount / c.sentCount * 100) + '%' : '-'}</td>
+        <td>${c.sentCount > 0 ? Math.round(c.clickCount / c.sentCount * 100) + '%' : '-'}</td>
+      </tr>
+    `).join('');
+  }
+
+  async function loadSettings() {
+    const data = await api('/api/settings');
+    if (data.settings) {
+      document.getElementById('s-fromName').value = data.settings.emailFromName || '';
+      document.getElementById('s-fromEmail').value = data.settings.emailFromAddr || '';
+      document.getElementById('s-resendKey').value = data.settings.resendApiKey ? '••••••••' : '';
+    }
+  }
+
+  async function saveSettings() {
+    const resendKey = document.getElementById('s-resendKey').value;
+    const body = {
+      shop,
+      emailFromName: document.getElementById('s-fromName').value,
+      emailFromAddr: document.getElementById('s-fromEmail').value,
+      ...(resendKey !== '••••••••' ? { resendApiKey: resendKey } : {}),
+    };
+    await fetch('/api/settings?shop=' + shop, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    toast('Ayarlar kaydedildi', '#10b981');
+  }
+
+  async function syncCustomers() {
+    toast('Müşteriler senkronize ediliyor...');
+    const data = await fetch('/api/sync?shop=' + shop, { method: 'POST' }).then(r => r.json());
+    if (data.success) toast(`${data.synced} müşteri senkronize edildi`, '#10b981');
+    else toast('Senkronizasyon hatası: ' + data.error, '#e94560');
+    loadDashboard();
+  }
+
+  function openCreateCampaign() {
+    document.getElementById('modal-campaign').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('modal-campaign').classList.remove('open');
+  }
+
+  document.getElementById('c-useai').addEventListener('change', function() {
+    document.getElementById('manual-content').style.display = this.checked ? 'none' : 'block';
+  });
+
+  async function createCampaign() {
+    const btn = document.getElementById('btn-create');
+    btn.textContent = 'Oluşturuluyor...';
+    btn.disabled = true;
+
+    const body = {
+      shop,
+      name: document.getElementById('c-name').value,
+      type: document.getElementById('c-type').value,
+      discountPct: document.getElementById('c-discount').value || null,
+      useAI: document.getElementById('c-useai').checked,
+      subject: document.getElementById('c-subject').value,
+      bodyHtml: document.getElementById('c-body').value,
+    };
+
+    const data = await fetch('/api/campaigns?shop=' + shop, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then(r => r.json());
+
+    btn.textContent = 'Kampanya Oluştur';
+    btn.disabled = false;
+    closeModal();
+
+    if (data.campaign) {
+      toast(`Kampanya oluşturuldu! ${data.targetCount} müşteri hedeflendi`, '#10b981');
+      loadCampaigns();
+    } else {
+      toast('Hata: ' + (data.error || 'Bilinmeyen hata'), '#e94560');
+    }
+  }
+
+  async function sendCampaign(id) {
+    if (!confirm('Kampanya gönderilsin mi?')) return;
+    toast('Gönderiliyor...');
+    const data = await fetch(`/api/campaigns/${id}/send?shop=${shop}`, { method: 'POST' }).then(r => r.json());
+    if (data.success) toast(`${data.sent} email gönderildi!`, '#10b981');
+    else toast('Hata: ' + (data.error || 'Email gönderilemedi'), '#e94560');
+    loadCampaigns();
+  }
+
+  async function subscribe(plan) {
+    if (!shop) {
+      toast('Mağaza bilgisi bulunamadı. Uygulamayı Shopify üzerinden açın.', '#e94560');
+      return;
+    }
+    toast('Abonelik sayfasına yönlendiriliyorsunuz...');
+    window.location.href = `/api/billing/subscribe?shop=${shop}&plan=${plan}`;
+  }
+
+  function typeLabel(type) {
+    const labels = { winback_30: '30 Gün', winback_60: '60 Gün', winback_90: '90+ Gün', atrisk: 'Risk Altında' };
+    return labels[type] || type;
+  }
+  function riskLabel(l) {
+    return { critical: 'Kritik', high: 'Yüksek', medium: 'Orta', low: 'Düşük' }[l] || l;
+  }
+  function riskColor(l) {
+    return { critical: '#e94560', high: '#f59e0b', medium: '#fbbf24', low: '#10b981' }[l] || '#6d7175';
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>

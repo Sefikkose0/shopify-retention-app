@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Shop {
+  id               String     @id @default(cuid())
+  domain           String     @unique
+  accessToken      String
+  scope            String
+  plan             String     @default("free")
+  billingId        String?
+  isActive         Boolean    @default(true)
+  installedAt      DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  customers        Customer[]
+  campaigns        Campaign[]
+  settings         ShopSettings?
+}
+
+model ShopSettings {
+  id              String   @id @default(cuid())
+  shopId          String   @unique
+  shop            Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  emailFromName   String   @default("Mağazanız")
+  emailFromAddr   String   @default("")
+  resendApiKey    String   @default("")
+  winbackDays30   Boolean  @default(true)
+  winbackDays60   Boolean  @default(true)
+  winbackDays90   Boolean  @default(true)
+  aiEnabled       Boolean  @default(true)
+  updatedAt       DateTime @updatedAt
+}
+
+model Customer {
+  id                String    @id @default(cuid())
+  shopId            String
+  shop              Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  shopifyCustomerId String
+  email             String
+  firstName         String    @default("")
+  lastName          String    @default("")
+  totalOrders       Int       @default(0)
+  totalSpent        Float     @default(0)
+  lastOrderDate     DateTime?
+  firstOrderDate    DateTime?
+  riskScore         Int       @default(0)
+  riskLevel         String    @default("low")
+  avgOrderValue     Float     @default(0)
+  tags              String    @default("")
+  syncedAt          DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  campaignTargets   CampaignTarget[]
+
+  @@unique([shopId, shopifyCustomerId])
+}
+
+model Campaign {
+  id               String           @id @default(cuid())
+  shopId           String
+  shop             Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name             String
+  type             String
+  status           String           @default("draft")
+  subject          String
+  bodyHtml         String
+  discountCode     String?
+  discountPct      Int?
+  sentCount        Int              @default(0)
+  openCount        Int              @default(0)
+  clickCount       Int              @default(0)
+  revenueRecovered Float            @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  targets          CampaignTarget[]
+}
+
+model CampaignTarget {
+  id          String    @id @default(cuid())
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerId  String
+  customer    Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status      String    @default("pending")
+  sentAt      DateTime?
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  convertedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([campaignId, customerId])
+}
