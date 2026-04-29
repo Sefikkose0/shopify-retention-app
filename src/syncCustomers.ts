@@ -40,7 +40,12 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
   if (!shopRecord) throw new Error("Shop not found");
 
   const { accessToken } = shopRecord;
-  const lastOrderByCustomer = await getLastOrderDates(shopDomain, accessToken);
+  let lastOrderByCustomer: Record<number, Date> = {};
+  try {
+    lastOrderByCustomer = await getLastOrderDates(shopDomain, accessToken);
+  } catch {
+    // read_orders scope yoksa atla, lastOrderDate null kalır
+  }
 
   let page = 1;
   let synced = 0;
