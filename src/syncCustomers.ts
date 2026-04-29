@@ -19,9 +19,17 @@ interface ShopifyOrder {
   customer: { id: number } | null;
 }
 
-async function shopifyFetch(shopDomain: string, accessToken: string, path: string, query: Record<string, string> = {}) {
-  const params = new URLSearchParams(query).toString();
-  const url = `https://${shopDomain}/admin/api/2024-01/${path}.json${params ? "?" + params : ""}`;
+function parseLinkHeader(link: string | null): { next?: string } {
+  if (!link) return {};
+  const result: { next?: string } = {};
+  for (const part of link.split(",")) {
+    const match = part.match(/<([^>]+)>;\s*rel="(\w+)"/);
+    if (match) result[match[2] as "next"] = match[1];
+  }
+  return result;
+}
+
+async function shopifyFetchWithHeaders(shopDomain: string, accessToken: string, url: string) {
   const res = await fetch(url, {
     headers: {
       "X-Shopify-Access-Token": accessToken,
@@ -32,7 +40,9 @@ async function shopifyFetch(shopDomain: string, accessToken: string, path: strin
     const body = await res.text();
     throw new Error(`Shopify API error ${res.status}: ${body}`);
   }
-  return res.json();
+  const data = await res.json();
+  const link = res.headers.get("Link");
+  return { data, link };
 }
 
 export async function syncShopCustomers(shopDomain: string): Promise<number> {
@@ -47,18 +57,13 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
     // read_orders scope yoksa atla, lastOrderDate null kalır
   }
 
-  let page = 1;
   let synced = 0;
-  let hasMore = true;
+  let nextUrl: string | undefined = `https://${shopDomain}/admin/api/2024-01/customers.json?limit=250`;
 
-  while (hasMore) {
-    const data = await shopifyFetch(shopDomain, accessToken, "customers", {
-      limit: "250",
-      page: String(page),
-    }) as { customers: ShopifyCustomer[] };
-
-    const customers = data.customers;
-    if (!customers || customers.length === 0) { hasMore = false; break; }
+  while (nextUrl) {
+    const { data, link } = await shopifyFetchWithHeaders(shopDomain, accessToken, nextUrl);
+    const customers: ShopifyCustomer[] = (data as any).customers || [];
+    if (customers.length === 0) break;
 
     for (const c of customers) {
       if (!c.email) continue;
@@ -101,8 +106,7 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
       synced++;
     }
 
-    if (customers.length < 250) hasMore = false;
-    else page++;
+    nextUrl = parseLinkHeader(link).next;
   }
 
   return synced;
@@ -110,16 +114,12 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
 
 async function getLastOrderDates(shopDomain: string, accessToken: string): Promise<Record<number, Date>> {
   const map: Record<number, Date> = {};
-  let page = 1;
-  let hasMore = true;
+  let nextUrl: string | undefined = `https://${shopDomain}/admin/api/2024-01/orders.json?limit=250&status=any`;
 
-  while (hasMore) {
-    const data = await shopifyFetch(shopDomain, accessToken, "orders", {
-      limit: "250", status: "any", page: String(page),
-    }) as { orders: ShopifyOrder[] };
-
-    const orders = data.orders || [];
-    if (orders.length === 0) { hasMore = false; break; }
+  while (nextUrl) {
+    const { data, link } = await shopifyFetchWithHeaders(shopDomain, accessToken, nextUrl);
+    const orders: ShopifyOrder[] = (data as any).orders || [];
+    if (orders.length === 0) break;
 
     for (const o of orders) {
       if (!o.customer) continue;
@@ -128,8 +128,7 @@ async function getLastOrderDates(shopDomain: string, accessToken: string): Promi
       if (!map[customerId] || orderDate > map[customerId]) map[customerId] = orderDate;
     }
 
-    if (orders.length < 250) hasMore = false;
-    else page++;
+    nextUrl = parseLinkHeader(link).next;
   }
 
   return map;
