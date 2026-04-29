@@ -13,6 +13,29 @@ function requireShop(req: Request, res: Response): string | null {
   return shop;
 }
 
+// --- Setup Token (Custom App bypass) ---
+router.get("/api/setup-token", async (req, res) => {
+  const { shop, token } = req.query as Record<string, string>;
+  if (!shop || !token) return res.status(400).json({ error: "shop ve token gerekli" });
+
+  await prisma.shop.upsert({
+    where: { domain: shop },
+    update: { accessToken: token, isActive: true },
+    create: { domain: shop, accessToken: token, scope: "read_customers,read_orders", isActive: true },
+  });
+
+  const shopRecord = await prisma.shop.findUnique({ where: { domain: shop } });
+  if (shopRecord) {
+    await prisma.shopSettings.upsert({
+      where: { shopId: shopRecord.id },
+      update: {},
+      create: { shopId: shopRecord.id },
+    });
+  }
+
+  res.json({ success: true, message: `Token kaydedildi: ${shop}` });
+});
+
 // --- Dashboard Stats ---
 router.get("/api/dashboard", async (req, res) => {
   const shop = requireShop(req, res);
