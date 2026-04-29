@@ -1,4 +1,3 @@
-import { getShopifyClient } from "./shopify";
 import { prisma } from "./db";
 import { calculateRisk } from "./riskEngine";
 
@@ -9,7 +8,6 @@ interface ShopifyCustomer {
   last_name: string;
   orders_count: number;
   total_spent: string;
-  last_order_name?: string;
   created_at: string;
   tags: string;
 }
@@ -21,28 +19,41 @@ interface ShopifyOrder {
   customer: { id: number } | null;
 }
 
+async function shopifyFetch(shopDomain: string, accessToken: string, path: string, query: Record<string, string> = {}) {
+  const params = new URLSearchParams(query).toString();
+  const url = `https://${shopDomain}/admin/api/2024-01/${path}.json${params ? "?" + params : ""}`;
+  const res = await fetch(url, {
+    headers: {
+      "X-Shopify-Access-Token": accessToken,
+      "Content-Type": "application/json",
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Shopify API error ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
 export async function syncShopCustomers(shopDomain: string): Promise<number> {
-  const client = await getShopifyClient(shopDomain);
   const shopRecord = await prisma.shop.findUnique({ where: { domain: shopDomain } });
   if (!shopRecord) throw new Error("Shop not found");
 
-  const lastOrderByCustomer = await getLastOrderDates(client);
+  const { accessToken } = shopRecord;
+  const lastOrderByCustomer = await getLastOrderDates(shopDomain, accessToken);
 
   let page = 1;
   let synced = 0;
   let hasMore = true;
 
   while (hasMore) {
-    const response = await client.get<{ customers: ShopifyCustomer[] }>({
-      path: "customers",
-      query: { limit: "250", page: String(page) },
-    });
+    const data = await shopifyFetch(shopDomain, accessToken, "customers", {
+      limit: "250",
+      page: String(page),
+    }) as { customers: ShopifyCustomer[] };
 
-    const customers = response.body.customers;
-    if (!customers || customers.length === 0) {
-      hasMore = false;
-      break;
-    }
+    const customers = data.customers;
+    if (!customers || customers.length === 0) { hasMore = false; break; }
 
     for (const c of customers) {
       if (!c.email) continue;
@@ -54,60 +65,32 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
       const firstOrderDate = c.created_at ? new Date(c.created_at) : null;
 
       const tempCustomer = {
-        id: "",
-        shopId: shopRecord.id,
+        id: "", shopId: shopRecord.id,
         shopifyCustomerId: String(c.id),
         email: c.email,
         firstName: c.first_name || "",
         lastName: c.last_name || "",
-        totalOrders,
-        totalSpent,
-        avgOrderValue,
-        lastOrderDate,
-        firstOrderDate,
-        riskScore: 0,
-        riskLevel: "low",
+        totalOrders, totalSpent, avgOrderValue,
+        lastOrderDate, firstOrderDate,
+        riskScore: 0, riskLevel: "low",
         tags: c.tags || "",
-        syncedAt: new Date(),
-        updatedAt: new Date(),
+        syncedAt: new Date(), updatedAt: new Date(),
       };
 
       const risk = calculateRisk(tempCustomer as any);
 
       await prisma.customer.upsert({
-        where: {
-          shopId_shopifyCustomerId: {
-            shopId: shopRecord.id,
-            shopifyCustomerId: String(c.id),
-          },
-        },
+        where: { shopId_shopifyCustomerId: { shopId: shopRecord.id, shopifyCustomerId: String(c.id) } },
         update: {
-          email: c.email,
-          firstName: c.first_name || "",
-          lastName: c.last_name || "",
-          totalOrders,
-          totalSpent,
-          avgOrderValue,
-          lastOrderDate,
-          riskScore: risk.score,
-          riskLevel: risk.level,
-          tags: c.tags || "",
-          syncedAt: new Date(),
+          email: c.email, firstName: c.first_name || "", lastName: c.last_name || "",
+          totalOrders, totalSpent, avgOrderValue, lastOrderDate,
+          riskScore: risk.score, riskLevel: risk.level, tags: c.tags || "", syncedAt: new Date(),
         },
         create: {
-          shopId: shopRecord.id,
-          shopifyCustomerId: String(c.id),
-          email: c.email,
-          firstName: c.first_name || "",
-          lastName: c.last_name || "",
-          totalOrders,
-          totalSpent,
-          avgOrderValue,
-          lastOrderDate,
-          firstOrderDate,
-          riskScore: risk.score,
-          riskLevel: risk.level,
-          tags: c.tags || "",
+          shopId: shopRecord.id, shopifyCustomerId: String(c.id),
+          email: c.email, firstName: c.first_name || "", lastName: c.last_name || "",
+          totalOrders, totalSpent, avgOrderValue, lastOrderDate, firstOrderDate,
+          riskScore: risk.score, riskLevel: risk.level, tags: c.tags || "",
         },
       });
       synced++;
@@ -120,27 +103,24 @@ export async function syncShopCustomers(shopDomain: string): Promise<number> {
   return synced;
 }
 
-async function getLastOrderDates(client: any): Promise<Record<number, Date>> {
+async function getLastOrderDates(shopDomain: string, accessToken: string): Promise<Record<number, Date>> {
   const map: Record<number, Date> = {};
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
-    const response = await (client.get as any)({
-      path: "orders",
-      query: { limit: "250", status: "any", page: String(page) },
-    });
+    const data = await shopifyFetch(shopDomain, accessToken, "orders", {
+      limit: "250", status: "any", page: String(page),
+    }) as { orders: ShopifyOrder[] };
 
-    const orders: ShopifyOrder[] = response.body.orders || [];
+    const orders = data.orders || [];
     if (orders.length === 0) { hasMore = false; break; }
 
     for (const o of orders) {
       if (!o.customer) continue;
       const customerId = o.customer.id;
       const orderDate = new Date(o.created_at);
-      if (!map[customerId] || orderDate > map[customerId]) {
-        map[customerId] = orderDate;
-      }
+      if (!map[customerId] || orderDate > map[customerId]) map[customerId] = orderDate;
     }
 
     if (orders.length < 250) hasMore = false;
