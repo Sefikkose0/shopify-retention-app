@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "prisma generate && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --format=cjs --packages=external",
+    "build": "prisma generate && prisma db push --accept-data-loss && esbuild src/server.ts --bundle --platform=node --outfile=dist/server.js --format=cjs --packages=external",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
