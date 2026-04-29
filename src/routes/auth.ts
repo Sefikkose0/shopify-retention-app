@@ -8,15 +8,13 @@ router.get("/auth", async (req: Request, res: Response) => {
   const shop = req.query.shop as string;
   if (!shop) return res.status(400).send("Missing shop parameter");
 
-  const authRoute = await shopify.auth.begin({
+  await shopify.auth.begin({
     shop,
     callbackPath: "/auth/callback",
     isOnline: false,
     rawRequest: req,
     rawResponse: res,
   });
-
-  res.redirect(authRoute);
 });
 
 router.get("/auth/callback", async (req: Request, res: Response) => {
