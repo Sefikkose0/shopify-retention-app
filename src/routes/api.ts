@@ -1,3 +1,4 @@
+// v2 - cursor pagination
 import { Router, Request, Response } from "express";
 import { prisma } from "../db";
 import { syncShopCustomers } from "../syncCustomers";
